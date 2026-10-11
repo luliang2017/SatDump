@@ -33,14 +33,6 @@ jobs:
       - name: Install mako
         if: steps.win-deps-x64.outputs.cache-hit != 'true'
         run: pip install mako
-      
-      - name: Install pkgconf
-        shell: pwsh
-        run: |
-          .\vcpkg\vcpkg.exe install pkgconf:x64-windows
-          # 将 pkgconf 的路径加入环境变量
-          echo "${{ github.workspace }}\vcpkg\installed\x64-windows\tools\pkgconf" >> $env:GITHUB_PATH
-          echo "PKG_CONFIG_PATH=${{ github.workspace }}\vcpkg\installed\x64-windows\lib\pkgconfig" >> $env:GITHUB_ENV
 
       - name: Add msbuild to PATH
         if: steps.win-deps-x64.outputs.cache-hit != 'true'
