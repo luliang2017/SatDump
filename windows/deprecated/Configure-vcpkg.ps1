@@ -66,7 +66,7 @@ cd vcpkg
 .\bootstrap-vcpkg.bat
 
 # Core packages. libxml2 is for libiio
-.\vcpkg install --triplet $platform pthreads libjpeg-turbo tiff libpng glfw3 libusb fftw3 libxml2 portaudio nng zstd armadillo opencl curl[ssl] hdf5[cpp] sqlite3
+.\vcpkg install --triplet $platform pthreads libjpeg-turbo tiff libpng glfw3 libusb fftw3 libxml2 portaudio nng zstd armadillo opencl curl[ssl] hdf5[cpp] sqlite3 pkgconf
 
 # Entirely for UHD...
 .\vcpkg install --triplet $platform boost-chrono boost-date-time boost-filesystem boost-program-options boost-system boost-serialization boost-thread `
@@ -104,6 +104,23 @@ cp -Force ..\build\$toolset_used\$generator\Debug\dll\libusb-1.0.pdb ..\..\..\in
 cp -Force ..\build\$toolset_used\$generator\Debug\dll\libusb-1.0.lib ..\..\..\installed\$platform\Debug\lib
 cp -force ..\libusb\libusb.h ..\..\..\installed\$platform\include
 cd ..\..
+# === 手动生成 libusb-1.0.pc ===
+$pkgconfig_dir = "..\..\..\installed\$platform\lib\pkgconfig"
+$null = mkdir $pkgconfig_dir -Force
+$libusb_pc_content = @"
+prefix=$($(Get-Item ..\..\..\installed\$platform).FullName)
+exec_prefix=`${prefix}
+libdir=`${exec_prefix}/lib
+includedir=`${prefix}/include
+
+Name: libusb-1.0
+Description: C API for USB device access
+Version: 1.0.27
+Libs: -L`${libdir} -llibusb-1.0
+Cflags: -I`${includedir}/libusb-1.0
+"@
+Set-Content -Path "$pkgconfig_dir\libusb-1.0.pc" -Value $libusb_pc_content
+# ================================
 rm -recurse -force libusb
 
 Write-Output "Building cpu_features..."
@@ -205,6 +222,12 @@ cmake --build . --config Release
 cmake --install .
 cd ..\..
 rm -recurse -force libfobos
+
+# 设置 pkg-config 路径
+$env:PKG_CONFIG_PATH = "$($(Get-Item ..\..\..\installed\$platform\lib\pkgconfig).FullName)"
+$env:PATH = "$($(Get-Item ..\..\..\vcpkg\installed\$platform\tools\pkgconf).FullName);$env:PATH"
+# 验证 pkg-config 是否能找到 libusb
+pkg-config --modversion libusb-1.0
 
 Write-Output "Building libiio..."
 git clone https://github.com/analogdevicesinc/libiio --depth 1 -b v0.26
