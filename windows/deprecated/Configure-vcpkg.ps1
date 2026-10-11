@@ -235,9 +235,46 @@ Write-Output "Building libiio..."
 git clone https://github.com/analogdevicesinc/libiio --depth 1 -b v0.26
 cd libiio
 (Get-Content -raw CMakeLists.txt) -replace "check_symbol_exists\(libusb_get_version libusb.h HAS_LIBUSB_GETVERSION\)", "" | Set-Content -Encoding ASCII CMakeLists.txt #Needed for cross-compilation only
+
+# --- 强行打补丁，绕过 pkg-config ---
+# ================= 打补丁：绕过 pkgconfig =================
+Write-Output "Patching libiio to bypass pkg-config..."
+$cmake_file = "CMakeLists.txt"
+$content = Get-Content $cmake_file -Raw
+
+# 1. 注释掉强制要求 PkgConfig 的语句
+$content = $content -replace 'find_package\(PkgConfig REQUIRED\)', '# find_package(PkgConfig REQUIRED) # Patched'
+
+# 2. 注释掉使用 pkg_check_modules 查找 libusb 的语句
+$content = $content -replace 'pkg_check_modules\(LIBUSB libusb-1\.0\)', '# pkg_check_modules(LIBUSB libusb-1.0) # Patched'
+
+# 3. 将找不到 libusb 时的 FATAL_ERROR 替换为手动指定路径（利用外面传进来的变量）
+# 注意：这里利用脚本中定义好的 $libusb_include 和 $libusb_lib
+$patch_code = @"
+if(NOT LIBUSB_FOUND)
+    message(STATUS "Patching libiio: manually setting libusb paths")
+    set(LIBUSB_FOUND TRUE)
+    set(LIBUSB_INCLUDE_DIRS "$($libusb_include)")
+    set(LIBUSB_LIBRARIES "$($libusb_lib)")
+    set(LIBUSB_LIBRARY_DIRS "")
+    set(LIBUSB_CFLAGS "-I$($libusb_include)")
+endif()
+"@
+$content = $content -replace 'message\(FATAL_ERROR "Unable to find libusb-1.0 dependency\.[\s\S]*?set WITH_USB_BACKEND=OFF\."\)', $patch_code
+
+Set-Content -Path $cmake_file -Value $content -Encoding UTF8
+# =========================================================
+# --- 补丁结束 ---
+
 $null = mkdir build
 cd build
-cmake $build_args -DWITH_IIOD=OFF -DWITH_TESTS=OFF -DWITH_ZSTD=ON -DLIBUSB_INCLUDE_DIR="$($libusb_include)" -DLIBUSB_LIBRARIES="$($libusb_lib)" ..
+# cmake $build_args -DWITH_IIOD=OFF -DWITH_TESTS=OFF -DWITH_ZSTD=ON -DLIBUSB_INCLUDE_DIR="$($libusb_include)" -DLIBUSB_LIBRARIES="$($libusb_lib)" ..
+
+# 原本的 -DLIBUSB_INCLUDE_DIR 改成 -DLIBUSB1_INCLUDE_DIR，同时增加 -DLIBUSB1_LIBRARY
+cmake $build_args -DWITH_IIOD=OFF -DWITH_TESTS=OFF -DWITH_ZSTD=ON `
+  -DLIBUSB1_INCLUDE_DIR="$($libusb_include)" `
+  -DLIBUSB1_LIBRARY="$($libusb_lib)" ..
+  
 cmake --build . --config Release
 cmake --install .
 cd ..\..
