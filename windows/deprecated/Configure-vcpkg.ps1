@@ -225,27 +225,34 @@ rm -recurse -force libfobos
 #cmake --install .
 #cd ..\..
 #rm -recurse -force libiio
+
 # ================= 使用预编译包替代源码编译 =================
 Write-Output "Downloading prebuilt libiio and libad9361..."
 
-# 1. 下载并解压 libiio 预编译包
-Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.25/libiio-0.25.gb6028fd-Windows-x64.zip" -OutFile "libiio.zip"
-Expand-Archive -Path "libiio.zip" -DestinationPath "libiio_extracted" -Force
-
-# 将 include 和 VS2022 的 lib/bin 复制到 SatDump 的依赖目录
-# 注意：$platform 变量在你的脚本里是 x64-windows，对应的目标路径是 ..\installed\x64-windows
+# 目标目录：..\installed\x64-windows
 $target_dir = "..\installed\$platform"
 $null = mkdir "$target_dir\include" -Force
 $null = mkdir "$target_dir\lib" -Force
 $null = mkdir "$target_dir\bin" -Force
 
-# 复制通用的 include
+# 1. 处理 libiio
+Write-Output "Processing libiio..."
+Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.25/libiio-0.25.gb6028fd-Windows.zip" -OutFile "libiio.zip"
+Expand-Archive -Path "libiio.zip" -DestinationPath "libiio_extracted" -Force
+
+# 复制头文件
 Copy-Item -Path "libiio_extracted\include\*" -Destination "$target_dir\include\" -Recurse -Force
-# 复制 VS2022 x64 版本的 lib 和 bin
-Copy-Item -Path "libiio_extracted\Windows-VS-2022-x64\lib\*" -Destination "$target_dir\lib\" -Recurse -Force
-Copy-Item -Path "libiio_extracted\Windows-VS-2022-x64\bin\*" -Destination "$target_dir\bin\" -Recurse -Force
+
+# 复制 VS2022 x64 下的所有内容到对应的 lib 和 bin 目录
+# 考虑到 libiio.lib 和 dll 可能混在同一个文件夹，我们分别复制
+$vs_folder = "libiio_extracted\Windows-VS-2022-x64"
+Copy-Item -Path "$vs_folder\*.lib" -Destination "$target_dir\lib\" -Force
+Copy-Item -Path "$vs_folder\*.exp" -Destination "$target_dir\lib\" -Force
+Copy-Item -Path "$vs_folder\*.dll" -Destination "$target_dir\bin\" -Force
+
 # 清理临时文件
 Remove-Item -Recurse -Force "libiio_extracted", "libiio.zip"
+
 
 Write-Output "Building libad9361-iio..."
 git clone https://github.com/analogdevicesinc/libad9361-iio --depth 1 -b v0.3
