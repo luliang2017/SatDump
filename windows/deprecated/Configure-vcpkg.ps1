@@ -106,23 +106,6 @@ cp -Force ..\build\$toolset_used\$generator\Debug\dll\libusb-1.0.pdb ..\..\..\in
 cp -Force ..\build\$toolset_used\$generator\Debug\dll\libusb-1.0.lib ..\..\..\installed\$platform\Debug\lib
 cp -force ..\libusb\libusb.h ..\..\..\installed\$platform\include
 cd ..\..
-# === 手动生成 libusb-1.0.pc ===
-$pkgconfig_dir = "..\..\..\installed\$platform\lib\pkgconfig"
-$null = mkdir $pkgconfig_dir -Force
-$libusb_pc_content = @"
-prefix=$($(Get-Item ..\..\..\installed\$platform).FullName)
-exec_prefix=`${prefix}
-libdir=`${exec_prefix}/lib
-includedir=`${prefix}/include
-
-Name: libusb-1.0
-Description: C API for USB device access
-Version: 1.0.27
-Libs: -L`${libdir} -llibusb-1.0
-Cflags: -I`${includedir}/libusb-1.0
-"@
-Set-Content -Path "$pkgconfig_dir\libusb-1.0.pc" -Value $libusb_pc_content
-# ================================
 rm -recurse -force libusb
 
 Write-Output "Building cpu_features..."
@@ -225,60 +208,44 @@ cmake --install .
 cd ..\..
 rm -recurse -force libfobos
 
-# 设置 pkg-config 路径
-$env:PKG_CONFIG_PATH = "$($(Get-Item ..\..\..\installed\$platform\lib\pkgconfig).FullName)"
-$env:PATH = "$($(Get-Item ..\..\..\vcpkg\installed\$platform\tools\pkgconf).FullName);$env:PATH"
-# 验证 pkg-config 是否能找到 libusb
-pkg-config --modversion libusb-1.0
-
-Write-Output "Building libiio..."
-git clone https://github.com/analogdevicesinc/libiio --depth 1 -b v0.26
-cd libiio
-(Get-Content -raw CMakeLists.txt) -replace "check_symbol_exists\(libusb_get_version libusb.h HAS_LIBUSB_GETVERSION\)", "" | Set-Content -Encoding ASCII CMakeLists.txt #Needed for cross-compilation only
-
-# --- 强行打补丁，绕过 pkg-config ---
-# ================= 打补丁：绕过 pkgconfig =================
-Write-Output "Patching libiio to bypass pkg-config..."
-$cmake_file = "CMakeLists.txt"
-$content = Get-Content $cmake_file -Raw
-
-# 1. 注释掉强制要求 PkgConfig 的语句
-$content = $content -replace 'find_package\(PkgConfig REQUIRED\)', '# find_package(PkgConfig REQUIRED) # Patched'
-
-# 2. 注释掉使用 pkg_check_modules 查找 libusb 的语句
-$content = $content -replace 'pkg_check_modules\(LIBUSB libusb-1\.0\)', '# pkg_check_modules(LIBUSB libusb-1.0) # Patched'
-
-# 3. 将找不到 libusb 时的 FATAL_ERROR 替换为手动指定路径（利用外面传进来的变量）
-# 注意：这里利用脚本中定义好的 $libusb_include 和 $libusb_lib
-$patch_code = @"
-if(NOT LIBUSB_FOUND)
-    message(STATUS "Patching libiio: manually setting libusb paths")
-    set(LIBUSB_FOUND TRUE)
-    set(LIBUSB_INCLUDE_DIRS "$($libusb_include)")
-    set(LIBUSB_LIBRARIES "$($libusb_lib)")
-    set(LIBUSB_LIBRARY_DIRS "")
-    set(LIBUSB_CFLAGS "-I$($libusb_include)")
-endif()
-"@
-$content = $content -replace 'message\(FATAL_ERROR "Unable to find libusb-1.0 dependency\.[\s\S]*?set WITH_USB_BACKEND=OFF\."\)', $patch_code
-
-Set-Content -Path $cmake_file -Value $content -Encoding UTF8
-# =========================================================
-# --- 补丁结束 ---
-
-$null = mkdir build
-cd build
+#Write-Output "Building libiio..."
+#git clone https://github.com/analogdevicesinc/libiio --depth 1 -b v0.26
+#cd libiio
+#(Get-Content -raw CMakeLists.txt) -replace "check_symbol_exists\(libusb_get_version libusb.h HAS_LIBUSB_GETVERSION\)", "" | Set-Content -Encoding ASCII CMakeLists.txt #Needed for cross-compilation only
+#$null = mkdir build
+#cd build
 # cmake $build_args -DWITH_IIOD=OFF -DWITH_TESTS=OFF -DWITH_ZSTD=ON -DLIBUSB_INCLUDE_DIR="$($libusb_include)" -DLIBUSB_LIBRARIES="$($libusb_lib)" ..
 
 # 原本的 -DLIBUSB_INCLUDE_DIR 改成 -DLIBUSB1_INCLUDE_DIR，同时增加 -DLIBUSB1_LIBRARY
-cmake $build_args -DWITH_IIOD=OFF -DWITH_TESTS=OFF -DWITH_ZSTD=ON `
-  -DLIBUSB1_INCLUDE_DIR="$($libusb_include)" `
-  -DLIBUSB1_LIBRARY="$($libusb_lib)" ..
+#cmake $build_args -DWITH_IIOD=OFF -DWITH_TESTS=OFF -DWITH_ZSTD=ON `
+#  -DLIBUSB1_INCLUDE_DIR="$($libusb_include)" `
+#  -DLIBUSB1_LIBRARY="$($libusb_lib)" ..
   
-cmake --build . --config Release
-cmake --install .
-cd ..\..
-rm -recurse -force libiio
+#cmake --build . --config Release
+#cmake --install .
+#cd ..\..
+#rm -recurse -force libiio
+# ================= 使用预编译包替代源码编译 =================
+Write-Output "Downloading prebuilt libiio and libad9361..."
+
+# 1. 下载并解压 libiio 预编译包
+Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.25/libiio-0.25.gb6028fd-Windows-x64.zip" -OutFile "libiio.zip"
+Expand-Archive -Path "libiio.zip" -DestinationPath "libiio_extracted" -Force
+
+# 将 include 和 VS2022 的 lib/bin 复制到 SatDump 的依赖目录
+# 注意：$platform 变量在你的脚本里是 x64-windows，对应的目标路径是 ..\installed\x64-windows
+$target_dir = "..\installed\$platform"
+$null = mkdir "$target_dir\include" -Force
+$null = mkdir "$target_dir\lib" -Force
+$null = mkdir "$target_dir\bin" -Force
+
+# 复制通用的 include
+Copy-Item -Path "libiio_extracted\include\*" -Destination "$target_dir\include\" -Recurse -Force
+# 复制 VS2022 x64 版本的 lib 和 bin
+Copy-Item -Path "libiio_extracted\Windows-VS-2022-x64\lib\*" -Destination "$target_dir\lib\" -Recurse -Force
+Copy-Item -Path "libiio_extracted\Windows-VS-2022-x64\bin\*" -Destination "$target_dir\bin\" -Recurse -Force
+# 清理临时文件
+Remove-Item -Recurse -Force "libiio_extracted", "libiio.zip"
 
 Write-Output "Building libad9361-iio..."
 git clone https://github.com/analogdevicesinc/libad9361-iio --depth 1 -b v0.3
