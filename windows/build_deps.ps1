@@ -212,13 +212,46 @@ ninja install
 cd ../..
 
 # LIBIIO
-git clone https://github.com/analogdevicesinc/libiio --depth 1 -b v0.26
-cd libiio
-mkdir build
-cd build
-cmake $cmake_params .. -DBUILD_SHARED_LIBS=ON
-ninja install
-cd ../..
+#git clone https://github.com/analogdevicesinc/libiio --depth 1 -b v0.26
+#cd libiio
+#mkdir build
+#cd build
+#cmake $cmake_params .. -DBUILD_SHARED_LIBS=ON
+#ninja install
+#cd ../..
+# ================= 替换为预编译包下载 =================
+Write-Output "Downloading prebuilt libiio..."
+Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.25/libiio-0.25.gb6028fd-Windows-x64.zip" -OutFile "libiio.zip"
+Expand-Archive -Path "libiio.zip" -DestinationPath "libiio_extracted" -Force
+
+# 将 libiio 的 include 和 VS2022 x64 的 lib、bin 复制到 deps\output 目录
+# 因为脚本是在 windows 目录下运行，所以输出路径通常是 ..\deps\output 或 windows\deps\output
+$output_dir = "..\deps\output"  # 如果脚本是在仓库根目录运行，请改为 "windows\deps\output"
+$null = mkdir "$output_dir\include" -Force
+$null = mkdir "$output_dir\lib" -Force
+$null = mkdir "$output_dir\bin" -Force
+
+Copy-Item -Path "libiio_extracted\include\*" -Destination "$output_dir\include\" -Recurse -Force
+Copy-Item -Path "libiio_extracted\Windows-VS-2022-x64\*.lib" -Destination "$output_dir\lib\" -Force
+Copy-Item -Path "libiio_extracted\Windows-VS-2022-x64\*.dll" -Destination "$output_dir\bin\" -Force
+Remove-Item -Recurse -Force "libiio_extracted", "libiio.zip"
+
+$env:LIBIIO_INCLUDEDIR = "$(Resolve-Path "$output_dir\include").Path"
+$env:LIBIIO_LIBRARIES = "$(Resolve-Path "$output_dir\lib\libiio.lib").Path"
+
+#Write-Output "Downloading and installing prebuilt libad9361..."
+#Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libad9361-iio/releases/download/v0.3/libad9361-setup.exe" -OutFile "libad9361-setup.exe"
+# 静默安装到 C:\libad9361_install
+#Start-Process -FilePath ".\libad9361-setup.exe" -ArgumentList "/S", "/D=C:\libad9361_install" -Wait
+
+# 将 libad9361 的文件复制到 output 目录
+#if (Test-Path "C:\libad9361_install") {
+#    Copy-Item -Path "C:\libad9361_install\include\*" -Destination "$output_dir\include\" -Recurse -Force
+#    Copy-Item -Path "C:\libad9361_install\lib\*" -Destination "$output_dir\lib\" -Recurse -Force
+#    Copy-Item -Path "C:\libad9361_install\bin\*" -Destination "$output_dir\bin\" -Recurse -Force
+#}
+#Remove-Item -Force "libad9361-setup.exe"
+# =======================================================
 
 # libad9361
 git clone https://github.com/analogdevicesinc/libad9361-iio --depth 1 -b v0.4.0
