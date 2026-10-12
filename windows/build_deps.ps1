@@ -221,7 +221,7 @@ cd ../..
 #cd ../..
 # ================= 替换为预编译包下载 =================
 Write-Output "Downloading prebuilt libiio..."
-Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.25/libiio-0.25.gb6028fd-Windows-x64.zip" -OutFile "libiio.zip"
+Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.25/libiio-0.25-gb6028fd-windows.zip" -OutFile "libiio.zip"
 Expand-Archive -Path "libiio.zip" -DestinationPath "libiio_extracted" -Force
 
 # 将 libiio 的 include 和 VS2022 x64 的 lib、bin 复制到 deps\output 目录
