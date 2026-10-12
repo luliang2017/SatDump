@@ -237,7 +237,7 @@ $null = mkdir "$target_dir\bin" -Force
 
 # 1. 处理 libiio
 Write-Output "Processing libiio..."
-Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.25/libiio-0.25.gb6028fd-Windows.zip" -OutFile "libiio.zip"
+Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.25/libiio-0.25-gb6028fd-windows.zip" -OutFile "libiio.zip"
 Expand-Archive -Path "libiio.zip" -DestinationPath "libiio_extracted" -Force
 
 # 复制头文件
